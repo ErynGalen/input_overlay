@@ -95,7 +95,7 @@ struct config_t get_config() {
         token[0] = 0;
 
         config.binding_count++;
-        // very unefficient, but should be fine?
+        // very inefficient, but should be fine?
         config.bindings =
             realloc(config.bindings,
                     sizeof(struct binding_config_t) * config.binding_count);
