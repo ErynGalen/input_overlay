@@ -18,6 +18,6 @@ struct config_t {
   char active_texture[1024]; // that that are pressed
 };
 
-struct config_t get_config();
+struct config_t get_config(void);
 
 #endif

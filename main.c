@@ -1,7 +1,11 @@
 #include "config.h"
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_events.h>
 #include <SDL2/SDL_image.h>
+#include <SDL2/SDL_keycode.h>
+#include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
+#include <SDL2/SDL_video.h>
 #include <poll.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -15,9 +19,11 @@ struct binding_t {
 
 struct state_t {
   SDL_Window *window;
+  int window_width, window_height;
   SDL_Renderer *renderer;
   SDL_Texture *active_texture;
   SDL_Texture *inactive_texture;
+  int texture_width, texture_height;
 
   bool running;
   bool changed;
@@ -49,8 +55,23 @@ void poll_events(struct state_t *state) {
     case SDL_QUIT:
       state->running = false;
       break;
-    case SDL_KEYDOWN:
+    case SDL_WINDOWEVENT:
+      switch (event.window.event) {
+      case SDL_WINDOWEVENT_SIZE_CHANGED:
+        state->window_width = event.window.data1;
+        state->window_height = event.window.data2;
+        state->changed = true;
+        break;
+      }
       break;
+    case SDL_KEYDOWN:
+      switch (event.key.keysym.sym) {
+      case SDLK_ESCAPE:
+        state->running = false;
+        break;
+      case SDLK_BACKSPACE:
+        SDL_SetWindowSize(state->window, state->texture_width, state->texture_height);
+      }
     default:
       break;
     }
@@ -60,17 +81,43 @@ void poll_events(struct state_t *state) {
 void draw(SDL_Renderer *renderer, struct state_t *state) {
   SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
   SDL_RenderClear(renderer);
-  SDL_RenderCopy(state->renderer, state->inactive_texture, NULL, NULL);
+
+  float scale;
+  SDL_Rect window_target;
+  if (state->window_width / (float)state->texture_width <
+      state->window_height / (float)state->texture_height) {
+    scale = state->window_width / (float)state->texture_width;
+    window_target.x = 0;
+    window_target.y = (state->window_height - state->texture_height * scale) / 2.0;
+    window_target.w = state->window_width;
+    window_target.h = state->texture_height * scale;
+  } else {
+    scale = state->window_height / (float)state->texture_height;
+    window_target.x = (state->window_width - state->texture_width * scale) / 2.0;
+    window_target.y = 0;
+    window_target.w = state->texture_width * scale;
+    window_target.h = state->window_height;
+  }
+
+  SDL_RenderCopy(state->renderer, state->inactive_texture, NULL,
+                 &window_target);
 
   for (int b = 0; b < state->bindings_count; b++) {
     if (state->bindings[b].is_active) {
-      SDL_Rect rect;
-      rect.h = state->bindings[b].h;
-      rect.w = state->bindings[b].w;
-      rect.x = state->bindings[b].x_pos;
-      rect.y = state->bindings[b].y_pos;
+      SDL_Rect source = {
+          .h = state->bindings[b].h,
+          .w = state->bindings[b].w,
+          .x = state->bindings[b].x_pos,
+          .y = state->bindings[b].y_pos,
+      };
+      SDL_Rect target = {
+        .x = window_target.x + source.x * scale,
+        .y = window_target.y + source.y * scale,
+        .w = source.w * scale,
+        .h = source.h * scale,
+      };
 
-      SDL_RenderCopy(state->renderer, state->active_texture, &rect, &rect);
+      SDL_RenderCopy(state->renderer, state->active_texture, &source, &target);
     }
   }
 
@@ -122,7 +169,7 @@ int load_textures(struct state_t *state, char *active_name,
   return 0;
 }
 
-int main() {
+int main(void) {
   struct state_t state;
   struct config_t config = get_config();
 
@@ -148,9 +195,9 @@ int main() {
     exit(-1);
   }
 
-  state.window = SDL_CreateWindow("Input Overlay", SDL_WINDOWPOS_UNDEFINED,
-                                  SDL_WINDOWPOS_UNDEFINED, 0, 0,
-                                  0); // we set the size later
+  state.window = SDL_CreateWindow(
+      "Input Overlay", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0, 0,
+      SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN); // we set the size later
   if (!state.window) {
     printf("Couldn't create SDL window: %s\n", SDL_GetError());
     exit(-1);
@@ -168,15 +215,13 @@ int main() {
     exit(-1);
   }
 
-  int window_width;
-  int window_height;
-  if (SDL_QueryTexture(state.inactive_texture, NULL, NULL, &window_width,
-                       &window_height)) {
+  if (SDL_QueryTexture(state.inactive_texture, NULL, NULL, &state.texture_width,
+                       &state.texture_height)) {
     printf("Couldn't calculate window size\n");
     cleanup_state(&state);
     exit(-1);
   }
-  SDL_SetWindowSize(state.window, window_width, window_height);
+  SDL_SetWindowSize(state.window, state.texture_width, state.texture_height);
 
   state.running = true;
   state.changed = true;

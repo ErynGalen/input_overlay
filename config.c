@@ -4,7 +4,7 @@
 
 #include "config.h"
 
-struct config_t get_config() {
+struct config_t get_config(void) {
   struct config_t config = {
       .binding_count = 0,
       .bindings = NULL,

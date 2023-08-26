@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.10.0)
 project(input_overlay VERSION 0.1.0)
 
+add_compile_options(-Wall -Wextra -Wpedantic)
+
 include(CTest)
 enable_testing()
 
